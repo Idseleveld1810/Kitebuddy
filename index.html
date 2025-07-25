@@ -1,28 +1,101 @@
-<!DOCTYPE html><html><head><title>Placeholder</title></head>
-  <body>
-    <h1>Coming soon</h1>
-     <script>
-    async function fetchWindguru() {
-      try {
-        const response = await fetch('/.netlify/functions/windguru?id=48441');
-        const data = await response.json();
-        console.log("Windguru response:", data);
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Kitebuddy – Open-Meteo</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #e0f7fa;
+      margin: 0;
+      padding: 1rem;
+    }
+    h1 {
+      text-align: center;
+    }
+    .forecast {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background: white;
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .good {
+      border: 2px solid green;
+    }
+    .arrow {
+      display: inline-block;
+      transform: rotate(0deg);
+      transition: transform 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <h1>Kitesurf Voorspelling – Domburg</h1>
+  <div id="now"></div>
+  <div class="forecast" id="forecast"></div>
 
-        const spotName = data.spot_name;
-        const forecast = data.forecast[12];
-        const windSpeed = forecast.ws;
-        const windDir = forecast.wd;
+  <script>
+    const lat = 51.56;
+    const lon = 3.49;
 
-        document.body.innerHTML += `
-          <h2>${spotName}</h2>
-          <p><strong>Wind om 12:00:</strong> ${windSpeed} kn, richting ${windDir}&deg;</p>
+    function degToArrow(deg) {
+      return `<span class="arrow" style="transform: rotate(${deg + 180}deg);">⬆️</span>`;
+    }
+
+    async function fetchForecast() {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=wind_speed_10m,wind_direction_10m&timezone=auto&windspeed_unit=kn`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const times = data.hourly.time;
+      const speeds = data.hourly.wind_speed_10m;
+      const dirs = data.hourly.wind_direction_10m;
+
+      // Huidige wind
+      const now = data.current_weather;
+      document.getElementById("now").innerHTML = `
+        <p><strong>Nu:</strong> ${now.windspeed} kn ${degToArrow(now.winddirection)} (${now.winddirection}°)</p>
+      `;
+
+      // Per dag structureren
+      const days = {};
+      for (let i = 0; i < times.length; i++) {
+        const dt = new Date(times[i]);
+        const h = dt.getHours();
+        if (h < 6 || h > 22) continue;
+
+        const day = dt.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' });
+        if (!days[day]) days[day] = [];
+        days[day].push({ hour: h, speed: speeds[i], dir: dirs[i] });
+      }
+
+      // Renderen
+      const container = document.getElementById("forecast");
+      for (const [day, values] of Object.entries(days)) {
+        const avg = values.reduce((s, v) => s + v.speed, 0) / values.length;
+        const avgDir = Math.round(values.reduce((s, v) => s + v.dir, 0) / values.length);
+        const isGood = values.some(v => v.speed >= 17 && v.speed <= 35);
+
+        const card = document.createElement("div");
+        card.className = "card" + (isGood ? " good" : "");
+        card.innerHTML = `
+          <h3>${day}</h3>
+          <p><strong>Gem. wind:</strong> ${avg.toFixed(1)} kn</p>
+          <p><strong>Richting:</strong> ${degToArrow(avgDir)} (${avgDir}°)</p>
+          <p>${isGood ? '✅ Kitedag!' : '🚫 Geen ideaal moment'}</p>
         `;
-      } catch (error) {
-        document.body.innerHTML += `<p style="color: red;">Windguru data kon niet geladen worden.</p>`;
-        console.error("Windguru fetch error:", error);
+        container.appendChild(card);
       }
     }
 
-    fetchWindguru();
+    fetchForecast();
   </script>
-  </body></html>
+</body>
+</html>
