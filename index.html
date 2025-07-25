@@ -1,29 +1,44 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="UTF-8">
-  <title>Kitebuddy – Open-Meteo</title>
+  <meta charset="UTF-8" />
+  <title>Kitebuddy – Kitespots</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     body {
       font-family: sans-serif;
-      background: #e0f7fa;
       margin: 0;
-      padding: 1rem;
+      padding: 0;
+      background: #f5f5f5;
     }
     h1 {
       text-align: center;
+      padding: 1rem;
+      background: #0097a7;
+      color: white;
+      margin: 0;
+    }
+    #map {
+      height: 300px;
+      margin: 1rem;
+      border-radius: 8px;
     }
     .forecast {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 1rem;
-      margin-top: 2rem;
+      padding: 1rem;
     }
     .card {
       background: white;
       padding: 1rem;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
       text-align: center;
     }
     .good {
@@ -32,18 +47,50 @@
     .arrow {
       display: inline-block;
       transform: rotate(0deg);
-      transition: transform 0.2s;
+    }
+    #now {
+      text-align: center;
+      font-size: 1rem;
     }
   </style>
 </head>
 <body>
-  <h1>Kitesurf Voorspelling – Domburg</h1>
+  <h1>Kitesurf Voorspelling – Nederland</h1>
+  <div id="map"></div>
   <div id="now"></div>
   <div class="forecast" id="forecast"></div>
 
   <script>
-    const lat = 51.56;
-    const lon = 3.49;
+    const spots = [
+      { name: "Domburg", lat: 51.56, lon: 3.49 },
+      { name: "Wijk aan Zee", lat: 52.5, lon: 4.6 },
+      { name: "Zandvoort", lat: 52.38, lon: 4.52 },
+      { name: "Noordwijk", lat: 52.23, lon: 4.43 },
+      { name: "Schellinkhout", lat: 52.65, lon: 5.14 },
+      { name: "Muiden", lat: 52.33, lon: 5.07 },
+      { name: "Workum", lat: 52.97, lon: 5.43 },
+      { name: "Brouwersdam", lat: 51.77, lon: 3.88 }
+    ];
+
+    let lat = 51.56;
+    let lon = 3.49;
+
+    const map = L.map('map').setView([52.3, 5.2], 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    spots.forEach(spot => {
+      const marker = L.marker([spot.lat, spot.lon]).addTo(map).bindPopup(spot.name);
+      marker.on('click', () => {
+        lat = spot.lat;
+        lon = spot.lon;
+        document.querySelector('h1').innerText = `Kitesurf Voorspelling – ${spot.name}`;
+        document.getElementById('forecast').innerHTML = '';
+        document.getElementById('now').innerHTML = '';
+        fetchForecast();
+      });
+    });
 
     function degToArrow(deg) {
       return `<span class="arrow" style="transform: rotate(${deg + 180}deg);">⬆️</span>`;
@@ -51,20 +98,17 @@
 
     async function fetchForecast() {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=wind_speed_10m,wind_direction_10m&timezone=auto&windspeed_unit=kn`;
-
       const res = await fetch(url);
       const data = await res.json();
       const times = data.hourly.time;
       const speeds = data.hourly.wind_speed_10m;
       const dirs = data.hourly.wind_direction_10m;
 
-      // Huidige wind
       const now = data.current_weather;
       document.getElementById("now").innerHTML = `
         <p><strong>Nu:</strong> ${now.windspeed} kn ${degToArrow(now.winddirection)} (${now.winddirection}°)</p>
       `;
 
-      // Per dag structureren
       const days = {};
       for (let i = 0; i < times.length; i++) {
         const dt = new Date(times[i]);
@@ -73,21 +117,33 @@
 
         const day = dt.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' });
         if (!days[day]) days[day] = [];
-        days[day].push({ hour: h, speed: speeds[i], dir: dirs[i] });
+        days[day].push({ hour: h, speed: speeds[i], dir: dirs[i], label: dt.getHours().toString().padStart(2, '0') + ':00' });
       }
 
-      // Renderen
       const container = document.getElementById("forecast");
       for (const [day, values] of Object.entries(days)) {
         const avg = values.reduce((s, v) => s + v.speed, 0) / values.length;
         const avgDir = Math.round(values.reduce((s, v) => s + v.dir, 0) / values.length);
-        const isGood = values.some(v => v.speed >= 17 && v.speed <= 35);
+
+        const kiteWindow = values.filter(v => v.speed >= 17 && v.speed <= 35);
+        const kiteAvg = kiteWindow.length > 0 ? kiteWindow.reduce((s, v) => s + v.speed, 0) / kiteWindow.length : null;
+        const kiteLabels = kiteWindow.map(v => v.label);
+        const kiteTimeRange = kiteLabels.length > 0 ? `${kiteLabels[0]}–${kiteLabels[kiteLabels.length - 1]}` : null;
+
+        const sorted = values.slice().sort((a, b) => b.speed - a.speed);
+        const top4 = sorted.slice(0, 4);
+        const top4avg = top4.reduce((s, v) => s + v.speed, 0) / top4.length;
+        const top4labels = top4.map(v => v.label).sort();
+
+        const isGood = kiteWindow.length >= 2;
 
         const card = document.createElement("div");
         card.className = "card" + (isGood ? " good" : "");
         card.innerHTML = `
           <h3>${day}</h3>
           <p><strong>Gem. wind:</strong> ${avg.toFixed(1)} kn</p>
+          <p><strong>Kite window:</strong> ${kiteWindow.length > 0 ? kiteTimeRange + ' (' + kiteWindow.length + 'u @ ' + kiteAvg.toFixed(1) + ' kn)' : '–'}</p>
+          <p><strong>Alternatief:</strong> ${top4avg.toFixed(1)} kn (${top4labels.join(', ')})</p>
           <p><strong>Richting:</strong> ${degToArrow(avgDir)} (${avgDir}°)</p>
           <p>${isGood ? '✅ Kitedag!' : '🚫 Geen ideaal moment'}</p>
         `;
