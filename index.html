@@ -1,1 +1,28 @@
-<!DOCTYPE html><html><head><title>Placeholder</title></head><body><h1>Coming soon</h1></body></html>
+<!DOCTYPE html><html><head><title>Placeholder</title></head>
+  <body>
+    <h1>Coming soon</h1>
+     <script>
+    async function fetchWindguru() {
+      try {
+        const response = await fetch('/.netlify/functions/windguru?id=48441');
+        const data = await response.json();
+        console.log("Windguru response:", data);
+
+        const spotName = data.spot_name;
+        const forecast = data.forecast[12];
+        const windSpeed = forecast.ws;
+        const windDir = forecast.wd;
+
+        document.body.innerHTML += `
+          <h2>${spotName}</h2>
+          <p><strong>Wind om 12:00:</strong> ${windSpeed} kn, richting ${windDir}&deg;</p>
+        `;
+      } catch (error) {
+        document.body.innerHTML += `<p style="color: red;">Windguru data kon niet geladen worden.</p>`;
+        console.error("Windguru fetch error:", error);
+      }
+    }
+
+    fetchWindguru();
+  </script>
+  </body></html>
