@@ -1,6 +1,6 @@
 exports.handler = async function(event, context) {
   const spotId = event.queryStringParameters.id || "48441";
-  const fetch = require("node-fetch");
+  const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
   const url = `https://www.windguru.cz/int/iapi.php?q=spotForecast&id_spot=${spotId}&lang=nl`;
 
   try {
